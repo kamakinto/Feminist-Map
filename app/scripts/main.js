@@ -76,7 +76,7 @@
    * CUSTOM JAVASCRIPT STARTS HERE
    */
 
-  var margin = { top: 50, left: 50, right: 50, bottom: 50 },
+  var margin = { top: 50, left: 100, right: 100, bottom: 50 },
    height = 500 - margin.top - margin.bottom,
     width = 1028 - margin.left - margin.right;
 
@@ -84,6 +84,7 @@
     .append("svg")
     .attr("height", height + margin.top + margin.bottom)
     .attr("width", width + margin.left + margin.right)
+    .attr("align", "center")
     .append("g")
     .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
@@ -91,9 +92,9 @@
     .attr("class", "tooltip")
     .style("opacity", 0);
 
-  var mapDetails = d3.select("body").append("div")
-    .attr("class", "map-details")
-    .style("opacity", 0);
+  var feministArray = [];
+
+
 
   /*
   Read in the world.topojson map
@@ -102,9 +103,9 @@
    */
 
   d3.queue()
-    .defer(d3.json, "scripts/world.json")
-    .defer(d3.csv, "scripts/feminists.csv")
-    .await(ready)
+    .defer(d3.json, "world.json")
+    .defer(d3.csv, "feminists.csv")
+    .await(ready);
 
 
   /*
@@ -114,7 +115,7 @@
    */
 
   var projection = d3.geoMercator()
-    .translate([width / 2, height / 2 ])
+    .translate([width / 2, height / 2 ]);
 
 
 
@@ -122,20 +123,42 @@
   create a path (geoPath) using the projection
    */
   var path = d3.geoPath()
-    .projection(projection)
+    .projection(projection);
 
-    //Add different scales .scale(100)
 
   function ready (error, data, feminists) {
 
-    console.log(data);
+    /*
+      Create The Table
+     */
+    var tableColumnSize = feminists.columns.length;
+    var header;
+    var columnHeaders = [];
+
+    //Create a new array of objects
+    for ( var i = 0; i <= feminists.length-1; i++ ){
+      feministArray[i] = feminists[i]
+    }
+
+    //Get the column headers
+    for( header in feminists.columns){
+      columnHeaders[header] = feminists.columns[header];
+    }
+
+    createTable(feministArray, columnHeaders);
+
+
+
+
+
+
 
     /*
     topojson.feature converts our RAW geo data into USEABLE geo data
     always pass it data, then data.objects.__something____ then get .features out of it
      */
 
-    var countries = topojson.feature(data, data.objects.countries).features
+    var countries = topojson.feature(data, data.objects.countries).features;
 
     /*
     Add a path for each country
@@ -155,7 +178,7 @@
       .on('mouseout', function (d) {
         //remove the class 'selected'
         d3.select(this).classed("selected", false)
-      })
+      });
 
 
 
@@ -164,23 +187,38 @@
     get the x/y from the lat/long + projections
      */
 
-    console.log(feminists)
-
     var aCircles = svg.selectAll(".author-birth-place")
       .data(feminists)
-      .enter().append("circle")
+      .enter().append("circle");
 
 
     var authorCircles = aCircles.attr("r", 3)
-
-
       .attr("cx", function(d) { return  projection([d.birthLong, d.birthLat])[0]})
       .attr("cy", function(d) { return  projection([d.birthLong, d.birthLat])[1]})
+      .on("mouseover", function(d,i) {
+        d3.select(this)
+          .attr("stroke-width", "1")
+          .attr("stroke", "white")
+        showToolTips(d, "author")})
+      .on("mouseout", function(d) {
+        d3.select(this)
+          .attr("stroke-width", "0")
+        hideToolTips(d)})
+      .on("click", function(d) {
 
+        var pubXY= projection([d.pubLong, d.pubLat])
+        var authXY = projection([d.birthLong, d.birthLat])
+        var linePath = createLine(authXY[0],authXY[1],pubXY[0],pubXY[1])
+        var pathTotalLength = linePath.node().getTotalLength();
 
-      .on("mouseover", function(d) {showToolTips(d, "author")})
-      .on("mouseout", function(d) {hideToolTips(d)})
-      .on("click", function(d) { })
+        linePath.attr("stroke-dasharray", pathTotalLength + " " + pathTotalLength)
+          .attr("stroke-dashoffset", pathTotalLength)
+          .transition()
+          .duration(3000)
+          .ease(d3.easeCubic)
+          .attr("stroke-dashoffset", 0)
+          .attr("stroke-width", "2");
+      });
 
 
     /*
@@ -203,22 +241,17 @@
     /*
       event listeners for the  publisher markers
      */
-      publisherCircles.on("mouseover", function(d){ showToolTips(d, "publisher")})
-      publisherCircles.on("mouseout", function(d){ hideToolTips(d)})
+      publisherCircles.on("mouseover", function(d){
+        d3.select(this)
+          .attr("stroke-width", "1")
+          .attr("stroke", "white")
+        showToolTips(d, "publisher")
+      })
+      publisherCircles.on("mouseout", function(d){
+        d3.select(this)
+          .attr("stroke-width", "0")
+        hideToolTips(d)})
       publisherCircles.on("click", function(d) {
-
-        var pubXY= projection([d.pubLong, d.pubLat])
-        var authXY = projection([d.birthLong, d.birthLat])
-        var linePath = createLine(pubXY[0],pubXY[1],authXY[0],authXY[1])
-        var pathTotalLength = linePath.node().getTotalLength();
-
-        linePath.attr("stroke-dasharray", pathTotalLength + " " + pathTotalLength)
-          .attr("stroke-dashoffset", pathTotalLength)
-          .transition()
-          .duration(3000)
-          .ease(d3.easeCubic)
-          .attr("stroke-dashoffset", 0)
-          .attr("stroke-width", "2");
 
       })
 
@@ -275,16 +308,69 @@ hideToolTips: uses a transition to hide the tooltip
    */
 
   function createLine( x1, y1, x2, y2){
+    // Use loop to build the paths from the author to multiple publisher points by appending
+    //the long/lat from the different publisher locations
     var pathString = "M"+x1+" "+y1+" "+"L"+" "+x2+" "+y2
+
     var simpleLine = svg.append("path")
       .attr("d", pathString )
       .attr("stroke", "white")
+      .attr("stroke-linecap", "round")
       .attr("stroke-width", "0")
+      .attr("marker-end", "url(#triangle)")
       .attr("fill", "none");
 
-
+    //if the line needs to keep drawing (more points) place the path command here
     return simpleLine
 }
+
+  /*
+   createTable: Creates a table for the author data and appends it to the appropriate section
+   @param: tableData - a cleaned up array of objects that represent the author's publication and birth information
+   @param: an array of table headers to be used in the table
+   */
+  function createTable(tableData, tableHeaders) {
+    //Create the table and add Material design lite classes
+    var dynamicTableDiv = document.getElementById("tableDiv");
+    var table = document.createElement('TABLE');
+    table.setAttribute('class', 'mdl-data-table mdl-js-data-table mdl-data-table--selectable mdl-shadow--2dp')
+
+    //Create the table header and adding the Material design lite class, as well as the header data
+    var trHeader = table.createTHead();
+    var row = trHeader.insertRow(0);
+    for ( var k = 0; k < tableHeaders.length; k++){
+      var hCell = document.createElement('th')
+      hCell.setAttribute('class', 'mdl-data-table__cell--non-numeric')
+      hCell.innerHTML = "<b>" + tableHeaders[k] + " </b>";
+      row.appendChild(hCell)
+ }
+  //Populate the table body
+  var tableBody = document.createElement('TBODY');
+    table.appendChild(tableBody);
+
+    for(var i = 0; i < tableData.length; i++){
+      var tr = document.createElement('TR');
+      tableBody.appendChild(tr);
+
+      for (var j = 0; j < tableHeaders.length; j++){
+        var td = document.createElement('TD');
+        td.setAttribute('class', 'mdl-data-table__cell--non-numeric')
+        var currentRow = tableData[i]
+        td.innerHTML = currentRow[tableHeaders[j]]
+        td.setAttribute('class', 'mdl-data-table__cell--non-numeric')
+        tr.appendChild(td);
+      }
+    }
+
+    //remove the spinner once the table is done
+    d3.select("#tableDiv")
+      .classed("is-active", false).classed("mdl-spinner", false).classed("mdl-js-spinner", false)
+
+
+    dynamicTableDiv.appendChild(table);
+
+
+  }
 
 
 

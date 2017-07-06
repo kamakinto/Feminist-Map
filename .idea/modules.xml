@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/../Feminist-Map/.idea/Feminist-Map.iml" filepath="$PROJECT_DIR$/../Feminist-Map/.idea/Feminist-Map.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/Feminist-Map.iml" filepath="$PROJECT_DIR$/.idea/Feminist-Map.iml" />
     </modules>
   </component>
 </project>
